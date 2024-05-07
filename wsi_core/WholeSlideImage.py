@@ -93,7 +93,17 @@ class WholeSlideImage(object):
         """
             Segment the tissue via HSV -> Median thresholding -> Binary threshold
         """
-        
+        print("Segmenting tissue...")
+        print("Segmentation level: ", seg_level)
+        print("Filter parameters: ", filter_params)
+        print("Reference patch size: ", ref_patch_size)
+        print("Excluding contour indices: ", exclude_ids)
+        print("Keeping contour indices: ", keep_ids)
+        print("Using Otsu thresholding: ", use_otsu)
+        print("Median threshold: ", mthresh)
+        print("Closing kernel size: ", close)
+        print("Binary threshold: ", sthresh, sthresh_up)
+
         def _filter_contours(contours, hierarchy, filter_params):
             """
                 Filter contours by: area.
@@ -165,7 +175,9 @@ class WholeSlideImage(object):
         filter_params['a_h'] = filter_params['a_h'] * scaled_ref_patch_area
         
         # Find and filter contours
-        contours, hierarchy = cv2.findContours(img_otsu, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE) # Find contours 
+        contours, hierarchy = cv2.findContours(img_otsu, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE) # Find contours
+        print("Number of contours found: ", len(contours))
+        print("Hierarchy shape: ", hierarchy.shape) 
         hierarchy = np.squeeze(hierarchy, axis=(0,))[:, 2:]
         if filter_params: foreground_contours, hole_contours = _filter_contours(contours, hierarchy, filter_params)  # Necessary for filtering out artifacts
 
@@ -680,6 +692,7 @@ class WholeSlideImage(object):
         downsample = self.level_downsamples[vis_level]
         w = img.shape[1]
         h = img.shape[0]
+        print('image size: {} x {}'.format(w, h))
         block_size_x = min(block_size, w)
         block_size_y = min(block_size, h)
         print('using block size: {} x {}'.format(block_size_x, block_size_y))

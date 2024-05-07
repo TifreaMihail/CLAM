@@ -5,3 +5,4 @@ job_logs/
 data_feat/
 patches/
 results/
+heatmaps/demo_abmil/slides/*.tif

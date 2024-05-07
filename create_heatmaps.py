@@ -13,6 +13,7 @@ from utils.utils import *
 from math import floor
 from utils.eval_utils import initiate_model as initiate_model
 from models.model_clam import CLAM_MB, CLAM_SB
+from models.model_abmil import ABMIL
 from models import get_encoder
 from types import SimpleNamespace
 from collections import namedtuple
@@ -45,6 +46,10 @@ def infer_single_slide(model, features, label, reverse_label_dict, k=1):
 
             A = A.view(-1, 1).cpu().numpy()
 
+        elif isinstance(model, (ABMIL)):
+            logits, Y_prob, Y_hat, A, _ = model(features)
+            Y_hat = Y_hat.item()
+            A = A.view(-1, 1).cpu().numpy()            
         else:
             raise NotImplementedError
 
@@ -93,13 +98,13 @@ if __name__ == '__main__':
         else:
             print ('\n'+key + " : " + str(value))
             
-    decision = input('Continue? Y/N ')
-    if decision in ['Y', 'y', 'Yes', 'yes']:
-        pass
-    elif decision in ['N', 'n', 'No', 'NO']:
-        exit()
-    else:
-        raise NotImplementedError
+    # decision = input('Continue? Y/N ')
+    # if decision in ['Y', 'y', 'Yes', 'yes']:
+    #     pass
+    # elif decision in ['N', 'n', 'No', 'NO']:
+    #     exit()
+    # else:
+    #     raise NotImplementedError
 
     args = config_dict
     patch_args = argparse.Namespace(**args['patching_arguments'])
@@ -261,6 +266,10 @@ if __name__ == '__main__':
             print('{}: {}'.format(key, val))
         
         print('Initializing WSI object')
+        print('slide path: ', slide_path)
+        print('mask file: ', mask_file)
+        print('seg params: ', seg_params)
+        print('filter params: ', filter_params)
         wsi_object = initialize_wsi(slide_path, seg_mask_path=mask_file, seg_params=seg_params, filter_params=filter_params)
         print('Done!')
 

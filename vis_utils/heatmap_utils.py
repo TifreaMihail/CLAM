@@ -10,7 +10,6 @@ from PIL import Image
 from math import floor
 import matplotlib.pyplot as plt
 from dataset_modules.wsi_dataset import Wsi_Region
-from dataset_modules.dataset_h5 import get_eval_transforms
 import h5py
 from wsi_core.WholeSlideImage import WholeSlideImage
 from scipy.stats import percentileofscore
@@ -23,10 +22,11 @@ from tqdm import tqdm
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def score2percentile(score, ref):
+    ref = ref.flatten()
     percentile = percentileofscore(ref, score)
     return percentile
 
-def drawHeatmap(scores, coords, slide_path=None, wsi_object=None, vis_level = -1, **kwargs):
+def drawHeatmap(scores, coords, slide_path=None, wsi_object=None, vis_level = -1, custom_downsample = 1, **kwargs):
     if wsi_object is None:
         wsi_object = WholeSlideImage(slide_path)
         print(wsi_object.name)
@@ -35,14 +35,17 @@ def drawHeatmap(scores, coords, slide_path=None, wsi_object=None, vis_level = -1
     if vis_level < 0:
         vis_level = wsi.get_best_level_for_downsample(32)
     
-    heatmap = wsi_object.visHeatmap(scores=scores, coords=coords, vis_level=vis_level, **kwargs)
+    heatmap = wsi_object.visHeatmap(scores=scores, coords=coords, vis_level=vis_level, custom_downsample=custom_downsample, **kwargs)
     return heatmap
 
 def initialize_wsi(wsi_path, seg_mask_path=None, seg_params=None, filter_params=None):
+    print('initializing wsi object')
     wsi_object = WholeSlideImage(wsi_path)
+    print("finished initializing wsi object")
     if seg_params['seg_level'] < 0:
         best_level = wsi_object.wsi.get_best_level_for_downsample(32)
         seg_params['seg_level'] = best_level
+        print('best level for segmentation: ', best_level)
 
     wsi_object.segmentTissue(**seg_params, filter_params=filter_params)
     wsi_object.saveSegmentation(seg_mask_path)

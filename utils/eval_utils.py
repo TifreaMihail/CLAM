@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.model_abmil import ABMIL
 from models.model_mil import MIL_fc, MIL_fc_mc
 from models.model_clam import CLAM_SB, CLAM_MB
 import pdb
@@ -16,15 +17,17 @@ import matplotlib.pyplot as plt
 
 def initiate_model(args, ckpt_path, device='cuda'):
     print('Init Model')    
-    model_dict = {"dropout": args.drop_out, 'n_classes': args.n_classes, "embed_dim": args.embed_dim}
+    model_dict = {"dropout": args.drop_out, 'n_classes': args.n_classes}
     
-    if args.model_size is not None and args.model_type in ['clam_sb', 'clam_mb']:
+    if args.model_size is not None and args.model_type in ['clam_sb', 'clam_mb', 'abmil']:
         model_dict.update({"size_arg": args.model_size})
     
     if args.model_type =='clam_sb':
         model = CLAM_SB(**model_dict)
     elif args.model_type =='clam_mb':
         model = CLAM_MB(**model_dict)
+    elif args.model_type =='abmil':
+        model = ABMIL(**model_dict)
     else: # args.model_type == 'mil'
         if args.n_classes > 2:
             model = MIL_fc_mc(**model_dict)
@@ -39,7 +42,7 @@ def initiate_model(args, ckpt_path, device='cuda'):
         if 'instance_loss_fn' in key:
             continue
         ckpt_clean.update({key.replace('.module', ''):ckpt[key]})
-    model.load_state_dict(ckpt_clean, strict=True)
+    model.load_state_dict(ckpt_clean, strict=False)
 
     _ = model.to(device)
     _ = model.eval()

@@ -152,7 +152,9 @@ def train(datasets, cur, args):
             model = CLAM_MB(**model_dict, instance_loss_fn=instance_loss_fn)
         else:
             raise NotImplementedError
-    
+    elif args.model_type == 'abmil':
+        from models.model_abmil import ABMIL
+        model = ABMIL(**model_dict)
     else: # args.model_type == 'mil'
         if args.n_classes > 2:
             model = MIL_fc_mc(**model_dict)
