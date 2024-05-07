@@ -1,0 +1,1 @@
+{'task': 'task_1_tumor_vs_normal', 'split': 'test', 'save_dir': './eval_results/EVAL_eval_camelyon16_abmil_50_s1_cv', 'models_dir': 'results/camelyon16_abmil_50_s1', 'model_type': 'abmil', 'drop_out': 0, 'model_size': 'small'}
