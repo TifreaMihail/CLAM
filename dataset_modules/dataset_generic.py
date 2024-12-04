@@ -335,9 +335,12 @@ class Generic_MIL_Dataset(Generic_WSI_Classification_Dataset):
 
 		if not self.use_h5:
 			if self.data_dir:
-				full_path = os.path.join(data_dir, 'pt_files', '{}.pt'.format(slide_id))
-				features = torch.load(full_path)
-				return features, label
+				full_path_f = os.path.join(data_dir, 'pt_files', '{}.pt'.format(slide_id))
+				full_path_c = os.path.join(data_dir, 'coords', '{}.pt'.format(slide_id))
+
+				features = torch.load(full_path_f)
+				coords = torch.load(full_path_c)
+				return features, label, coords
 			
 			else:
 				return slide_id, label
@@ -349,6 +352,7 @@ class Generic_MIL_Dataset(Generic_WSI_Classification_Dataset):
 				coords = hdf5_file['coords'][:]
 
 			features = torch.from_numpy(features)
+			coords = torch.from_numpy(coords)
 			return features, label, coords
 
 

@@ -29,5 +29,5 @@ which python
 cd /home/mcs001/20181133/CLAM/
 
 # hopefull envirenment variables are now set and stuff can be located :)
-# CUDA_VISIBLE_DEVICES=0 python create_patches_fp.py --source /home/tue/shared_data/ml-datasets/CAMELYON16/images --save_dir ./patches0/Camelyon16_patch256_ostu --patch_level 0 --patch_size 256 --step_size 256 --seg --patch --stitch --use_ostu 
-CUDA_VISIBLE_DEVICES=0 python create_patches_fp.py --source /home/tue/shared_data/ml-datasets/CAMELYON16/images --save_dir ./patches/Camelyon16_patch256_ostu --patch_size 256 --step_size 256 --preset bwh_biopsy.csv --seg --patch --stitch
+CUDA_VISIBLE_DEVICES=0 python create_patches_fp.py --source /home/tue/shared_data/ml-datasets/CAMELYON16/images --save_dir ./patches0/Camelyon16_patch256_ostu_pl1_wsi --patch_level 1 --patch_size 256 --step_size 256 --seg --patch --stitch --use_ostu 
+# CUDA_VISIBLE_DEVICES=0 python create_patches_fp.py --source /home/tue/shared_data/ml-datasets/CAMELYON16/images--save_dir ./patches/Camelyon16_patch256_ostu_pl1 --patch_level 1 --patch_size 256 --step_size 256 --preset bwh_biopsy.csv --seg --patch --stitch

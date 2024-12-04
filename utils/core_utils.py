@@ -5,8 +5,11 @@ import os
 from dataset_modules.dataset_generic import save_splits
 from models.model_mil import MIL_fc, MIL_fc_mc
 from models.model_clam import CLAM_MB, CLAM_SB
+from models.model_abmil import ABMIL, GABMIL
+from models.model_transmil import TransMIL
+from models.model_revu import ReverseUNetLSE
 from sklearn.preprocessing import label_binarize
-from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import roc_auc_score, roc_curve, f1_score
 from sklearn.metrics import auc as calc_auc
 
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -113,22 +116,26 @@ def train(datasets, cur, args):
     print("Validating on {} samples".format(len(val_split)))
     print("Testing on {} samples".format(len(test_split)))
 
+    # Initialize the loss function
     print('\nInit loss function...', end=' ')
     if args.bag_loss == 'svm':
         from topk.svm import SmoothTop1SVM
-        loss_fn = SmoothTop1SVM(n_classes = args.n_classes)
+        loss_fn = SmoothTop1SVM(n_classes=args.n_classes)
         if device.type == 'cuda':
             loss_fn = loss_fn.cuda()
     else:
         loss_fn = nn.CrossEntropyLoss()
     print('Done!')
     
+    # Initialize the model based on the specified type
     print('\nInit Model...', end=' ')
-    model_dict = {"dropout": args.drop_out, 
-                  'n_classes': args.n_classes, 
-                  "embed_dim": args.embed_dim}
-    
-    if args.model_size is not None and args.model_type != 'mil'and args.model_type != 'abmil':
+    model_dict = {
+        "dropout": args.drop_out, 
+        'n_classes': args.n_classes, 
+        "embed_dim": args.embed_dim
+    }
+
+    if args.model_size is not None and args.model_type not in ['mil', 'abmil', 'gabmil']:
         model_dict.update({"size_arg": args.model_size})
     
     if args.model_type in ['clam_sb', 'clam_mb']:
@@ -152,29 +159,45 @@ def train(datasets, cur, args):
             model = CLAM_MB(**model_dict, instance_loss_fn=instance_loss_fn)
         else:
             raise NotImplementedError
-    elif args.model_type == 'abmil':
-        from models.model_abmil import ABMIL
-        model = ABMIL(**model_dict)
+    elif args.model_type == 'revu':
+        model_dict.update({'unet_type': args.unet_type})
+        model = ReverseUNetLSE(**model_dict)
+    elif args.model_type in ['abmil', 'gabmil']:
+        if args.model_type == 'gabmil':
+            model_dict.update({'win_size': args.window_size})
+            model_dict.update({'use_grid': args.use_grid})
+            model_dict.update({'use_skip': args.use_skip})
+            model_dict.update({'use_norm': args.use_norm})
+            model_dict.update({'use_block': args.use_block})
+            model_dict.update({'use_weight_norm': args.use_weight_norm})
+            model = GABMIL(**model_dict)
+        else:
+            model = ABMIL(**model_dict)
+    elif args.model_type == 'transmil':
+            model = TransMIL(**model_dict)
     else: # args.model_type == 'mil'
         if args.n_classes > 2:
             model = MIL_fc_mc(**model_dict)
         else:
             model = MIL_fc(**model_dict)
-    
-    _ = model.to(device)
+
+    model = model.to(device)
     print('Done!')
     print_network(model)
 
+    # Initialize the optimizer
     print('\nInit optimizer ...', end=' ')
     optimizer = get_optim(model, args)
     print('Done!')
-    
+
+    # Initialize data loaders
     print('\nInit Loaders...', end=' ')
     train_loader = get_split_loader(train_split, training=True, testing = args.testing, weighted = args.weighted_sample)
     val_loader = get_split_loader(val_split,  testing = args.testing)
     test_loader = get_split_loader(test_split, testing = args.testing)
     print('Done!')
 
+    # Setup early stopping if enabled
     print('\nSetup EarlyStopping...', end=' ')
     if args.early_stopping:
         early_stopping = EarlyStopping(patience = 20, stop_epoch=50, verbose = True)
@@ -183,45 +206,54 @@ def train(datasets, cur, args):
         early_stopping = None
     print('Done!')
 
+    # Training loop
     for epoch in range(args.max_epochs):
-        if args.model_type in ['clam_sb', 'clam_mb'] and not args.no_inst_cluster:     
+        if args.model_type in ['clam_sb', 'clam_mb'] and not args.no_inst_cluster:
             train_loop_clam(epoch, model, train_loader, optimizer, args.n_classes, args.bag_weight, writer, loss_fn)
-            stop = validate_clam(cur, epoch, model, val_loader, args.n_classes, 
-                early_stopping, writer, loss_fn, args.results_dir)
-        
+            stop = validate_clam(cur, epoch, model, val_loader, args.n_classes, early_stopping, writer, loss_fn, args.results_dir)
         else:
             train_loop(epoch, model, train_loader, optimizer, args.n_classes, writer, loss_fn)
-            stop = validate(cur, epoch, model, val_loader, args.n_classes, 
-                early_stopping, writer, loss_fn, args.results_dir)
-        
-        if stop: 
+            stop = validate(cur, epoch, model, val_loader, args.n_classes, early_stopping, writer, loss_fn, args.results_dir)
+
+        if stop:
             break
 
+    # Load best model state for evaluation if early stopping is enabled
     if args.early_stopping:
         model.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
     else:
         torch.save(model.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
 
-    _, val_error, val_auc, _= summary(model, val_loader, args.n_classes)
-    print('Val error: {:.4f}, ROC AUC: {:.4f}'.format(val_error, val_auc))
+    # Validate and get validation metrics
+    val_results, val_error, val_auc, val_logger, val_loss, val_f1 = summary(model, val_loader, args.n_classes, loss_fn)
+    print('Val error: {:.4f}, ROC AUC: {:.4f}, Loss: {:.4f}'.format(val_error, val_auc, val_loss))
 
-    results_dict, test_error, test_auc, acc_logger = summary(model, test_loader, args.n_classes)
-    print('Test error: {:.4f}, ROC AUC: {:.4f}'.format(test_error, test_auc))
+    # Test and get test metrics
+    results_dict, test_error, test_auc, test_logger, test_loss, test_f1 = summary(model, test_loader, args.n_classes, loss_fn)
+    print('Test error: {:.4f}, ROC AUC: {:.4f}, Loss: {:.4f}'.format(test_error, test_auc, test_loss))
 
+    # Print class-wise metrics
     for i in range(args.n_classes):
-        acc, correct, count = acc_logger.get_summary(i)
+        acc, correct, count = test_logger.get_summary(i)
         print('class {}: acc {}, correct {}/{}'.format(i, acc, correct, count))
-
         if writer:
             writer.add_scalar('final/test_class_{}_acc'.format(i), acc, 0)
 
     if writer:
         writer.add_scalar('final/val_error', val_error, 0)
         writer.add_scalar('final/val_auc', val_auc, 0)
+        writer.add_scalar('final/val_loss', val_loss, 0)
+        writer.add_scalar('final/val_f1', val_f1, 0)
+
         writer.add_scalar('final/test_error', test_error, 0)
         writer.add_scalar('final/test_auc', test_auc, 0)
+        writer.add_scalar('final/test_loss', test_loss, 0)
+        writer.add_scalar('final/test_f1', test_f1, 0)
+
         writer.close()
-    return results_dict, test_auc, val_auc, 1-test_error, 1-val_error 
+
+    
+    return results_dict, test_auc, val_auc, 1 - test_error, 1 - val_error, test_loss, val_loss, test_f1, val_f1
 
 
 def train_loop_clam(epoch, model, loader, optimizer, n_classes, bag_weight, writer = None, loss_fn = None):
@@ -298,10 +330,10 @@ def train_loop(epoch, model, loader, optimizer, n_classes, writer = None, loss_f
     train_error = 0.
 
     print('\n')
-    for batch_idx, (data, label) in enumerate(loader):
-        data, label = data.to(device), label.to(device)
+    for batch_idx, (data, label, coord) in enumerate(loader):
+        data, label, coord = data.to(device), label.to(device), coord.to(device)
 
-        logits, Y_prob, Y_hat, _, _ = model(data)
+        logits, Y_prob, Y_hat, _, _ = model(data, coords= coord)
         
         acc_logger.log(Y_hat, label)
         loss = loss_fn(logits, label)
@@ -347,10 +379,10 @@ def validate(cur, epoch, model, loader, n_classes, early_stopping = None, writer
     labels = np.zeros(len(loader))
 
     with torch.no_grad():
-        for batch_idx, (data, label) in enumerate(loader):
-            data, label = data.to(device, non_blocking=True), label.to(device, non_blocking=True)
+        for batch_idx, (data, label, coord) in enumerate(loader):
+            data, label, coord = data.to(device, non_blocking=True), label.to(device, non_blocking=True), coord.to(device, non_blocking=True)
 
-            logits, Y_prob, Y_hat, _, _ = model(data)
+            logits, Y_prob, Y_hat, _, _ = model(data, coords= coord)
 
             acc_logger.log(Y_hat, label)
             
@@ -409,7 +441,7 @@ def validate_clam(cur, epoch, model, loader, n_classes, early_stopping = None, w
     labels = np.zeros(len(loader))
     sample_size = model.k_sample
     with torch.inference_mode():
-        for batch_idx, (data, label) in enumerate(loader):
+        for batch_idx, (data, label, _) in enumerate(loader):
             data, label = data.to(device), label.to(device)      
             logits, Y_prob, Y_hat, _, instance_dict = model(data, label=label, instance_eval=True)
             acc_logger.log(Y_hat, label)
@@ -484,7 +516,7 @@ def validate_clam(cur, epoch, model, loader, n_classes, early_stopping = None, w
 
     return False
 
-def summary(model, loader, n_classes):
+def summary(model, loader, n_classes, loss_fn):
     acc_logger = Accuracy_Logger(n_classes=n_classes)
     model.eval()
     test_loss = 0.
@@ -492,26 +524,38 @@ def summary(model, loader, n_classes):
 
     all_probs = np.zeros((len(loader), n_classes))
     all_labels = np.zeros(len(loader))
+    all_predictions = np.zeros(len(loader))
 
     slide_ids = loader.dataset.slide_data['slide_id']
     patient_results = {}
 
-    for batch_idx, (data, label) in enumerate(loader):
-        data, label = data.to(device), label.to(device)
+    for batch_idx, (data, label, coord) in enumerate(loader):
+        data, label, coord = data.to(device), label.to(device), coord.to(device)
         slide_id = slide_ids.iloc[batch_idx]
         with torch.inference_mode():
-            logits, Y_prob, Y_hat, _, _ = model(data)
+            logits, Y_prob, Y_hat, _, _ = model(data, coords= coord)
+            loss = loss_fn(logits, label)
 
         acc_logger.log(Y_hat, label)
         probs = Y_prob.cpu().numpy()
         all_probs[batch_idx] = probs
         all_labels[batch_idx] = label.item()
-        
+        all_predictions[batch_idx] = Y_hat.cpu().numpy()
+
         patient_results.update({slide_id: {'slide_id': np.array(slide_id), 'prob': probs, 'label': label.item()}})
         error = calculate_error(Y_hat, label)
         test_error += error
+        test_loss += loss.item()
 
     test_error /= len(loader)
+    test_loss /= len(loader)
+
+    # F1 score calculation
+    # if n_classes == 2:
+    #     f1 = f1_score(all_labels, all_predictions, average='binary')
+    # else:
+    #     f1 = f1_score(all_labels, all_predictions, average='macro')
+    f1 = f1_score(all_labels, all_predictions, average='macro')
 
     if n_classes == 2:
         auc = roc_auc_score(all_labels, all_probs[:, 1])
@@ -528,5 +572,4 @@ def summary(model, loader, n_classes):
 
         auc = np.nanmean(np.array(aucs))
 
-
-    return patient_results, test_error, auc, acc_logger
+    return patient_results, test_error, auc, acc_logger, test_loss, f1

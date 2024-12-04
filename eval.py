@@ -19,6 +19,8 @@ from utils.eval_utils import *
 parser = argparse.ArgumentParser(description='CLAM Evaluation Script')
 parser.add_argument('--data_root_dir', type=str, default=None,
                     help='data directory')
+parser.add_argument('--root_sub_dir', type=str, default='Camelyon16_patch256_ostu_res50_pl1', 
+                    help='data sub-directory')
 parser.add_argument('--results_dir', type=str, default='./results',
                     help='relative path to results folder, i.e. '+
                     'the directory containing models_exp_code relative to project root (default: ./results)')
@@ -71,11 +73,11 @@ f.close()
 print(settings)
 if args.task == 'task_1_tumor_vs_normal':
     args.n_classes=2
-    dataset = Generic_MIL_Dataset(csv_path = 'dataset_csv/tumor_vs_normal_dummy_clean.csv',
-                            data_dir= os.path.join(args.data_root_dir, 'tumor_vs_normal_resnet_features'),
+    dataset = Generic_MIL_Dataset(csv_path = 'dataset_csv/camelyon16_wsi.csv',
+                            data_dir= os.path.join(args.data_root_dir, args.root_sub_dir),
                             shuffle = False, 
                             print_info = True,
-                            label_dict = {'normal_tissue':0, 'tumor_tissue':1},
+                            label_dict = {0:0, 1:1},
                             patient_strat=False,
                             ignore=[])
 
@@ -121,6 +123,7 @@ datasets_id = {'train': 0, 'val': 1, 'test': 2, 'all': -1}
 if __name__ == "__main__":
     all_results = []
     all_auc = []
+    all_f1 = []
     all_acc = []
     for ckpt_idx in range(len(ckpt_paths)):
         if datasets_id[args.split] < 0:
@@ -129,13 +132,15 @@ if __name__ == "__main__":
             csv_path = '{}/splits_{}.csv'.format(args.splits_dir, folds[ckpt_idx])
             datasets = dataset.return_splits(from_id=False, csv_path=csv_path)
             split_dataset = datasets[datasets_id[args.split]]
-        model, patient_results, test_error, auc, df  = eval(split_dataset, args, ckpt_paths[ckpt_idx])
-        all_results.append(all_results)
+        
+        model, patient_results, test_error, auc, f1, df = eval(split_dataset, args, ckpt_paths[ckpt_idx])
+        all_results.append(patient_results)
         all_auc.append(auc)
+        all_f1.append(f1)
         all_acc.append(1-test_error)
         df.to_csv(os.path.join(args.save_dir, 'fold_{}.csv'.format(folds[ckpt_idx])), index=False)
 
-    final_df = pd.DataFrame({'folds': folds, 'test_auc': all_auc, 'test_acc': all_acc})
+    final_df = pd.DataFrame({'folds': folds, 'test_auc': all_auc, 'test_f1': all_f1, 'test_acc': all_acc})
     if len(folds) != args.k:
         save_name = 'summary_partial_{}_{}.csv'.format(folds[0], folds[-1])
     else:

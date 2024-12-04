@@ -21,4 +21,15 @@ cd /home/mcs001/20181133/CLAM/
 
 export CUDA_VISIBLE_DEVICES=0
 
-python eval.py --k 5 --models_exp_code camelyon16_abmil_50_s1 --save_exp_code eval_camelyon16_abmil_50_s1_cv --task task_1_tumor_vs_normal --model_type abmil --results_dir results --data_root_dir /home/mcs001/20181133/CLAM/data_feat --splits_dir /home/mcs001/20181133/CLAM/splits/task_1_tumor_vs_normal_100
+# learning_rates=(1e-3 1e-4 1e-5)
+# regularizations=(1e-3 1e-4 1e-5 1e-6)
+learning_rates=(1e-3)
+regularizations=(1e-5)
+for lr in "${learning_rates[@]}"
+do
+    for rg in "${regularizations[@]}"
+    do
+        model_code="camelyon16_abmil_50_lr${lr}_rg${rg}_wsi_s2021"
+        python eval.py --k 5 --models_exp_code $model_code --save_exp_code ${model_code}_pl1_best --task task_1_tumor_vs_normal --model_type abmil --data_root_dir ./data_feat --root_sub_dir Camelyon16_patch256_ostu_res50_pl1_wsi --splits_dir /home/mcs001/20181133/CLAM/splits/task_camelyon16_wsi
+    done
+done

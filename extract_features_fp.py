@@ -23,6 +23,10 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 
 def compute_w_loader(output_path, loader, model, verbose = 0):
 	"""
+	(could be changed to use a dataloader with a collate function explicitly
+	stated (see WSI-finetuning) rather than the implicit collate function
+	of DataLoader; should produce same results)
+	
 	args:
 		output_path: directory to save computed features (.h5 file)
 		model: pytorch model

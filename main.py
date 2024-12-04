@@ -22,6 +22,7 @@ import numpy as np
 
 
 def main(args):
+    print('Start training')	
     # create results directory if necessary
     if not os.path.isdir(args.results_dir):
         os.mkdir(args.results_dir)
@@ -39,6 +40,10 @@ def main(args):
     all_val_auc = []
     all_test_acc = []
     all_val_acc = []
+    all_test_f1 = []
+    all_val_f1 = []
+    all_test_loss = []
+    all_val_loss = []
     folds = np.arange(start, end)
     for i in folds:
         seed_torch(args.seed + i)
@@ -46,17 +51,31 @@ def main(args):
                 csv_path='{}/splits_{}.csv'.format(args.split_dir, i))
         
         datasets = (train_dataset, val_dataset, test_dataset)
-        results, test_auc, val_auc, test_acc, val_acc  = train(datasets, i, args)
+        results, test_auc, val_auc, test_acc, val_acc, test_loss, val_loss, test_f1, val_f1 = train(datasets, i, args)
         all_test_auc.append(test_auc)
         all_val_auc.append(val_auc)
         all_test_acc.append(test_acc)
         all_val_acc.append(val_acc)
-        #write results to pkl
+        all_test_f1.append(test_f1)
+        all_val_f1.append(val_f1)
+        all_test_loss.append(test_loss)
+        all_val_loss.append(val_loss)
+        
+        # write results to pkl
         filename = os.path.join(args.results_dir, 'split_{}_results.pkl'.format(i))
         save_pkl(filename, results)
 
-    final_df = pd.DataFrame({'folds': folds, 'test_auc': all_test_auc, 
-        'val_auc': all_val_auc, 'test_acc': all_test_acc, 'val_acc' : all_val_acc})
+    final_df = pd.DataFrame({
+        'folds': folds, 
+        'test_auc': all_test_auc, 
+        'val_auc': all_val_auc, 
+        'test_acc': all_test_acc, 
+        'val_acc': all_val_acc,
+        'test_f1': all_test_f1,  # Add test F1 scores to DataFrame
+        'val_f1': all_val_f1,    # Add validation F1 scores to DataFrame
+        'test_loss': all_test_loss, 
+        'val_loss': all_val_loss
+    })
 
     if len(folds) != args.k:
         save_name = 'summary_partial_{}_{}.csv'.format(start, end)
@@ -64,10 +83,13 @@ def main(args):
         save_name = 'summary.csv'
     final_df.to_csv(os.path.join(args.results_dir, save_name))
 
+
 # Generic training settings
 parser = argparse.ArgumentParser(description='Configurations for WSI Training')
 parser.add_argument('--data_root_dir', type=str, default=None, 
                     help='data directory')
+parser.add_argument('--root_sub_dir', type=str, default='Camelyon16_patch256_ostu_res50_pl1', 
+                    help='data sub-directory')
 parser.add_argument('--embed_dim', type=int, default=1024)
 parser.add_argument('--max_epochs', type=int, default=200,
                     help='maximum number of epochs to train (default: 200)')
@@ -93,12 +115,13 @@ parser.add_argument('--opt', type=str, choices = ['adam', 'sgd'], default='adam'
 parser.add_argument('--drop_out', type=float, default=0.25, help='dropout')
 parser.add_argument('--bag_loss', type=str, choices=['svm', 'ce'], default='ce',
                      help='slide-level classification loss function (default: ce)')
-parser.add_argument('--model_type', type=str, choices=['clam_sb', 'clam_mb', 'mil', 'abmil'], default='abmil', 
-                    help='type of model (default:abmil; clam_sb = clam w/ single attention branch)')
+parser.add_argument('--model_type', type=str, choices=['clam_sb', 'clam_mb', 'mil', 'abmil', 'gabmil', 'revu', 'transmil'], default='gabmil', 
+                    help='type of model (default:gabmil; clam_sb = clam w/ single attention branch)')
 parser.add_argument('--exp_code', type=str, help='experiment code for saving results')
 parser.add_argument('--weighted_sample', action='store_true', default=False, help='enable weighted sampling')
 parser.add_argument('--model_size', type=str, choices=['small', 'big'], default='small', help='size of model, does not affect mil')
 parser.add_argument('--task', type=str, choices=['task_1_tumor_vs_normal',  'task_2_tumor_subtyping'])
+
 ### CLAM specific options
 parser.add_argument('--no_inst_cluster', action='store_true', default=False,
                      help='disable instance-level clustering')
@@ -109,8 +132,43 @@ parser.add_argument('--subtyping', action='store_true', default=False,
 parser.add_argument('--bag_weight', type=float, default=0.7,
                     help='clam: weight coefficient for bag-level loss (default: 0.7)')
 parser.add_argument('--B', type=int, default=8, help='numbr of positive/negative patches to sample for clam')
+### GABMIL specific options
+parser.add_argument('--window_size', type=int, default=2, help='window size for gabmil')
+### REVU specific options
+parser.add_argument('--unet_type', type=str, choices=['small', 'normal', 'conv', 'DSC'], default='small', help='type of unet')
+
+# parser.add_argument('--use_block', action='store_true', default=False,
+                    #  help='Use a residual connection')
+parser.add_argument('--use_grid', action='store_true', default=False,
+                     help='Use a grid attention')
+parser.add_argument('--use_skip', action='store_true', default=False,
+                     help='Use a residual connection')
+parser.add_argument('--use_norm', action='store_true', default=False,
+                     help='Use Layer normalization')
+parser.add_argument('--use_block', action='store_true', default=False,
+                     help='Use block attention')
+parser.add_argument('--use_weight_norm', action='store_true', default=False,
+                     help='Use Weight normalization')
 args = parser.parse_args()
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+args.drop_out=True
+# args.early_stopping =False
+# args.lr = 1e-4
+args.weighted_sample =True
+# args.inst_loss ="svm"
+args.task = "task_1_tumor_vs_normal"
+# args.split_dir = "task_camelyon16/"
+# args.csv_path = './dataset_csv/camelyon16.csv'
+args.data_root_dir = "./data_feat"
+# sub_feat_dir = 'Camelyon16_patch256_res50'
+# args.max_epochs = 60
+# args.reg = 1e-04
+args.use_drop_out = True
+# args.bag_weight = 0.7
+args.seed = 2021
+# args.k = 1
+# args.k_end = 1
 
 def seed_torch(seed=7):
     import random
@@ -154,8 +212,8 @@ print('\nLoad Dataset')
 
 if args.task == 'task_1_tumor_vs_normal':
     args.n_classes=2
-    dataset = Generic_MIL_Dataset(csv_path = 'dataset_csv/camelyon16.csv',
-                            data_dir= os.path.join(args.data_root_dir, 'Camelyon16_patch256_ostu_res50'),
+    dataset = Generic_MIL_Dataset(csv_path = 'dataset_csv/camelyon16_wsi.csv',
+                            data_dir= os.path.join(args.data_root_dir, args.root_sub_dir),
                             shuffle = False, 
                             seed = args.seed, 
                             print_info = True,

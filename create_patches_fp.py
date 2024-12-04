@@ -52,7 +52,7 @@ def seg_and_patch(source, save_dir, patch_save_dir, mask_save_dir, stitch_save_d
 				  filter_params = {'a_t':100, 'a_h': 16, 'max_n_holes':8}, 
 				  vis_params = {'vis_level': -1, 'line_thickness': 500},
 				  patch_params = {'use_padding': True, 'contour_fn': 'four_pt'},
-				  patch_level = 0,
+				  patch_level = 1,
 				  use_default_params = False, 
 				  seg = False, save_mask = True, 
 				  stitch= False, 
@@ -246,6 +246,7 @@ parser.add_argument('--patch_level', type=int, default=0,
 					help='downsample level at which to patch')
 parser.add_argument('--process_list',  type = str, default=None,
 					help='name of list of images to process with parameters (.csv)')
+parser.add_argument('--use_ostu', default=False, action='store_true')
 
 if __name__ == '__main__':
 	args = parser.parse_args()
@@ -276,7 +277,7 @@ if __name__ == '__main__':
 		if key not in ['source']:
 			os.makedirs(val, exist_ok=True)
 
-	seg_params = {'seg_level': 5, 'sthresh': 8, 'mthresh': 7, 'close': 4, 'use_otsu': False,
+	seg_params = {'seg_level': 5, 'sthresh': 8, 'mthresh': 7, 'close': 4, 'use_otsu': args.use_ostu,
 				  'keep_ids': 'none', 'exclude_ids': 'none'}
 	filter_params = {'a_t':100, 'a_h': 16, 'max_n_holes':8}
 	vis_params = {'vis_level': -1, 'line_thickness': 250}

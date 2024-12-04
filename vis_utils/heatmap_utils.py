@@ -65,13 +65,13 @@ def compute_from_patches(wsi_object, img_transforms, feature_extractor=None, cla
     mode = "w"
     for idx, (roi, coords) in enumerate(tqdm(roi_loader)):
         roi = roi.to(device)
-        coords = coords.numpy()
+        # coords = coords.numpy()
         
         with torch.inference_mode():
             features = feature_extractor(roi)
 
             if attn_save_path is not None:
-                A = model(features, attention_only=True)
+                A = model(features, coords=coords, attention_only=True)
            
                 if A.size(0) > 1: #CLAM multi-branch attention
                     A = A[clam_pred]

@@ -13,7 +13,7 @@ from utils.utils import *
 from math import floor
 from utils.eval_utils import initiate_model as initiate_model
 from models.model_clam import CLAM_MB, CLAM_SB
-from models.model_abmil import ABMIL
+from models.model_abmil import ABMIL, GABMIL
 from models import get_encoder
 from types import SimpleNamespace
 from collections import namedtuple
@@ -33,7 +33,7 @@ parser.add_argument('--config_file', type=str, default="heatmap_config_template.
 args = parser.parse_args()
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def infer_single_slide(model, features, label, reverse_label_dict, k=1):
+def infer_single_slide(model, features, label, coords, reverse_label_dict, k=1):
     features = features.to(device)
     with torch.inference_mode():
         if isinstance(model, (CLAM_SB, CLAM_MB)):
@@ -46,8 +46,8 @@ def infer_single_slide(model, features, label, reverse_label_dict, k=1):
 
             A = A.view(-1, 1).cpu().numpy()
 
-        elif isinstance(model, (ABMIL)):
-            logits, Y_prob, Y_hat, A, _ = model(features)
+        elif isinstance(model, (ABMIL)) or isinstance(model, (GABMIL)):
+            logits, Y_prob, Y_hat, A, _ = model(features, coords = coords)
             Y_hat = Y_hat.item()
             A = A.view(-1, 1).cpu().numpy()            
         else:
@@ -125,6 +125,8 @@ if __name__ == '__main__':
     preset = data_args.preset
     def_seg_params = {'seg_level': -1, 'sthresh': 15, 'mthresh': 11, 'close': 2, 'use_otsu': False, 
                       'keep_ids': 'none', 'exclude_ids':'none'}
+    # def_filter_params = {'a_t':1, 'a_h': 1, 'max_n_holes':2}
+    # def_vis_params = {'vis_level': -1, 'line_thickness': 50}
     def_filter_params = {'a_t':50.0, 'a_h': 8.0, 'max_n_holes':10}
     def_vis_params = {'vis_level': -1, 'line_thickness': 250}
     def_patch_params = {'use_padding': True, 'contour_fn': 'four_pt'}
@@ -169,7 +171,7 @@ if __name__ == '__main__':
     print('\nckpt path: {}'.format(ckpt_path))
     
     if model_args.initiate_fn == 'initiate_model':
-        model =  initiate_model(model_args, ckpt_path)
+        model =  initiate_model(model_args, ckpt_path, device)
     else:
         raise NotImplementedError
 
@@ -288,8 +290,8 @@ if __name__ == '__main__':
         
         features_path = os.path.join(r_slide_save_dir, slide_id+'.pt')
         h5_path = os.path.join(r_slide_save_dir, slide_id+'.h5')
-    
-
+        # features_path = '/home/mcs001/20181133/CLAM/data_feat/Camelyon16_patch256_ostu_res50/pt_files/test_106.pt'
+        # h5_path = '/home/mcs001/20181133/CLAM/data_feat/Camelyon16_patch256_ostu_res50/h5_files/test_106.h5'
         ##### check if h5_features_file exists ######
         if not os.path.isfile(h5_path) :
             _, _, wsi_object = compute_from_patches(wsi_object=wsi_object, 
@@ -304,15 +306,19 @@ if __name__ == '__main__':
         if not os.path.isfile(features_path):
             file = h5py.File(h5_path, "r")
             features = torch.tensor(file['features'][:])
+            coords = file['coords'][:]
             torch.save(features, features_path)
+            torch.save(coords, os.path.join(r_slide_save_dir, slide_id+'_coords.pt'))
             file.close()
 
         # load features 
         features = torch.load(features_path)
+        coords = torch.load(os.path.join(r_slide_save_dir, slide_id+'_coords.pt'))
         process_stack.loc[i, 'bag_size'] = len(features)
         
         wsi_object.saveSegmentation(mask_file)
-        Y_hats, Y_hats_str, Y_probs, A = infer_single_slide(model, features, label, reverse_label_dict, exp_args.n_classes)
+        Y_hats, Y_hats_str, Y_probs, A = infer_single_slide(model, features, label, coords, reverse_label_dict, exp_args.n_classes)
+        print('Y_hats: ', Y_hats, 'Y_hats_str: ', Y_hats_str, 'Y_probs: ', Y_probs)
         del features
         
         if not os.path.isfile(block_map_save_path): 

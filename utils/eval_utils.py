@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.model_abmil import ABMIL
+from models.model_abmil import ABMIL, GABMIL
 from models.model_mil import MIL_fc, MIL_fc_mc
 from models.model_clam import CLAM_SB, CLAM_MB
 import pdb
@@ -13,7 +13,9 @@ from utils.utils import *
 from utils.core_utils import Accuracy_Logger
 from sklearn.metrics import roc_auc_score, roc_curve, auc
 from sklearn.preprocessing import label_binarize
+from sklearn.metrics import f1_score
 import matplotlib.pyplot as plt
+
 
 def initiate_model(args, ckpt_path, device='cuda'):
     print('Init Model')    
@@ -28,6 +30,14 @@ def initiate_model(args, ckpt_path, device='cuda'):
         model = CLAM_MB(**model_dict)
     elif args.model_type =='abmil':
         model = ABMIL(**model_dict)
+    elif args.model_type =='gabmil':
+        model_dict.update({'win_size': args.window_size})
+        model_dict.update({'use_grid': args.use_grid})
+        model_dict.update({'use_skip': args.use_skip})
+        model_dict.update({'use_norm': args.use_norm})
+        model_dict.update({'use_block': args.use_block})
+        model_dict.update({'use_weight_norm': args.use_weight_norm})
+        model = GABMIL(**model_dict)
     else: # args.model_type == 'mil'
         if args.n_classes > 2:
             model = MIL_fc_mc(**model_dict)
@@ -36,13 +46,23 @@ def initiate_model(args, ckpt_path, device='cuda'):
 
     print_network(model)
 
-    ckpt = torch.load(ckpt_path)
+    ckpt = torch.load(ckpt_path, map_location=torch.device(device))
     ckpt_clean = {}
     for key in ckpt.keys():
         if 'instance_loss_fn' in key:
             continue
-        ckpt_clean.update({key.replace('.module', ''):ckpt[key]})
-    model.load_state_dict(ckpt_clean, strict=False)
+        # ckpt_clean.update({key.replace('.module', ''):ckpt[key]})
+        new_key = key.replace('.module', '')
+        if args.model_type =='abmil':
+            new_key2 = new_key.replace('attention_net.3', 'attention_net.2')
+        elif args.model_type =='gabmil':
+            new_key2 = new_key.replace('attention_net.3', 'attention_net.2')
+        else:
+            new_key2 = new_key
+        # Update the clean checkpoint dictionary
+        ckpt_clean[new_key2] = ckpt[key]
+        
+    model.load_state_dict(ckpt_clean, strict=True)
 
     _ = model.to(device)
     _ = model.eval()
@@ -53,10 +73,16 @@ def eval(dataset, args, ckpt_path):
     
     print('Init Loaders')
     loader = get_simple_loader(dataset)
-    patient_results, test_error, auc, df, _ = summary(model, loader, args)
+    patient_results, test_error, auc, f1, df, _ = summary(model, loader, args)
     print('test_error: ', test_error)
     print('auc: ', auc)
-    return model, patient_results, test_error, auc, df
+    return model, patient_results, test_error, auc, f1, df
+
+def get_f1(preds, labels):
+    y_true = np.asarray(preds).reshape(-1,)
+    y_pred = np.asarray(labels).reshape(-1,)
+    f1 = f1_score(y_true,y_pred,average='macro')
+    return f1
 
 def summary(model, loader, args):
     acc_logger = Accuracy_Logger(n_classes=args.n_classes)
@@ -95,12 +121,16 @@ def summary(model, loader, args):
     aucs = []
     if len(np.unique(all_labels)) == 1:
         auc_score = -1
-
+        f1 = -1
     else: 
         if args.n_classes == 2:
             auc_score = roc_auc_score(all_labels, all_probs[:, 1])
+            f1 = get_f1(all_preds, all_labels)
+            #f1 = f1_score(all_labels, all_preds, average='binary')
         else:
             binary_labels = label_binarize(all_labels, classes=[i for i in range(args.n_classes)])
+            # f1 = f1_score(all_labels, all_preds, average='weighted')
+            f1 = get_f1(all_preds, all_labels)
             for class_idx in range(args.n_classes):
                 if class_idx in all_labels:
                     fpr, tpr, _ = roc_curve(binary_labels[:, class_idx], all_probs[:, class_idx])
@@ -118,4 +148,4 @@ def summary(model, loader, args):
     for c in range(args.n_classes):
         results_dict.update({'p_{}'.format(c): all_probs[:,c]})
     df = pd.DataFrame(results_dict)
-    return patient_results, test_error, auc_score, df, acc_logger
+    return patient_results, test_error, auc_score, f1, df, acc_logger
