@@ -22,3 +22,6 @@ scripts/test_revu
 scripts/test_transmil
 scripts/ws1_attention
 splits/other
+heatmaps/PRODUCTION
+heatmaps/PRODUCTION_WS1
+heatmaps/PRODUCTION2
