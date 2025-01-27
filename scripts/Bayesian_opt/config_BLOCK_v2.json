@@ -1,0 +1,29 @@
+{
+    "MAIN_SCRIPT": "/home/mcs001/20181133/CLAM/main.py",
+    "RESULTS_DIR": "/home/mcs001/20181133/CLAM/results/hyperopt_BLOCK_v2",
+    "SEED": 2021,
+    "K": 1,
+    "DEFAULT_ARGS": {
+        "drop_out": 0.25,
+        "early_stopping": true,
+        "weighted_sample": true,
+        "bag_loss": "ce",
+        "task": "task_1_tumor_vs_normal",
+        "model_type": "gabmil",
+        "data_root_dir": "/home/mcs001/20181133/CLAM/data_feat",
+        "root_sub_dir": "Camelyon16_patch256_ostu_res50_pl1_wsi",
+        "split_dir": "/home/mcs001/20181133/CLAM/splits/task_camelyon16",
+        "embed_dim": 1024,
+        "model_subtype": "v2"
+    },
+    "HYPERPARAMETERS": {
+        "learning_rate": {"min": 1e-5, "max": 1e-2, "type": "log-uniform"},
+        "regularization": {"min": 1e-6, "max": 1e-1, "type": "log-uniform"},
+        "window_size": {"min": 1, "max": 100, "type": "integer"},
+        "use_grid": {"values": [0], "type": "categorical"},
+        "use_block": {"values": [1], "type": "categorical"},
+        "use_skip": {"values": [1], "type": "categorical"},
+        "use_norm": {"values": [0, 1], "type": "categorical"},
+        "use_weight_norm": {"values": [0], "type": "categorical"}
+    }
+}
