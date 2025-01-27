@@ -64,6 +64,17 @@ def main(args):
         # write results to pkl
         filename = os.path.join(args.results_dir, 'split_{}_results.pkl'.format(i))
         save_pkl(filename, results)
+    
+    # Select the performance metric to optimize (e.g., final validation loss)
+    val_loss = np.mean(all_val_loss)  # Average validation loss over all folds
+    output_file = os.path.join(args.results_dir, "output_metric.txt")
+
+    # Write the final validation loss to the output file
+    with open(output_file, 'w') as f:
+        f.write(f"{val_loss}\n")
+
+    print(f"Validation Loss: {val_loss} written to {output_file}")
+
 
     final_df = pd.DataFrame({
         'folds': folds, 
@@ -149,26 +160,14 @@ parser.add_argument('--use_block', action='store_true', default=False,
                      help='Use block attention')
 parser.add_argument('--use_weight_norm', action='store_true', default=False,
                      help='Use Weight normalization')
+# add model_subtype argument
+parser.add_argument('--model_subtype', type=str, choices=['conv', 'attn', 'normal', 'v2'], default='normal', help='subtype of model')
 args = parser.parse_args()
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 args.drop_out=True
-# args.early_stopping =False
-# args.lr = 1e-4
 args.weighted_sample =True
-# args.inst_loss ="svm"
-args.task = "task_1_tumor_vs_normal"
-# args.split_dir = "task_camelyon16/"
-# args.csv_path = './dataset_csv/camelyon16.csv'
-args.data_root_dir = "./data_feat"
-# sub_feat_dir = 'Camelyon16_patch256_res50'
-# args.max_epochs = 60
-# args.reg = 1e-04
 args.use_drop_out = True
-# args.bag_weight = 0.7
-args.seed = 2021
-# args.k = 1
-# args.k_end = 1
 
 def seed_torch(seed=7):
     import random

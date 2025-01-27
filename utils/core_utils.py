@@ -5,7 +5,7 @@ import os
 from dataset_modules.dataset_generic import save_splits
 from models.model_mil import MIL_fc, MIL_fc_mc
 from models.model_clam import CLAM_MB, CLAM_SB
-from models.model_abmil import ABMIL, GABMIL
+from models.model_abmil import ABMIL, GABMIL, GABMIL_CONV, GABMIL_ATTN, GABMIL_v2
 from models.model_transmil import TransMIL
 from models.model_revu import ReverseUNetLSE
 from sklearn.preprocessing import label_binarize
@@ -170,7 +170,14 @@ def train(datasets, cur, args):
             model_dict.update({'use_norm': args.use_norm})
             model_dict.update({'use_block': args.use_block})
             model_dict.update({'use_weight_norm': args.use_weight_norm})
-            model = GABMIL(**model_dict)
+            if args.model_subtype == 'conv':
+                model = GABMIL_CONV(**model_dict)
+            elif args.model_subtype == 'attn':
+                model = GABMIL_ATTN(**model_dict)
+            elif args.model_subtype == 'v2':
+                model = GABMIL_v2(**model_dict)
+            else:
+                model = GABMIL(**model_dict)
         else:
             model = ABMIL(**model_dict)
     elif args.model_type == 'transmil':
@@ -200,7 +207,7 @@ def train(datasets, cur, args):
     # Setup early stopping if enabled
     print('\nSetup EarlyStopping...', end=' ')
     if args.early_stopping:
-        early_stopping = EarlyStopping(patience = 20, stop_epoch=50, verbose = True)
+        early_stopping = EarlyStopping(patience = 20, stop_epoch=1, verbose = True)
 
     else:
         early_stopping = None
