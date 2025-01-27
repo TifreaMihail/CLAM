@@ -122,7 +122,7 @@ parser.add_argument('--split_dir', type=str, default=None,
 parser.add_argument('--log_data', action='store_true', default=True, help='log data using tensorboard')
 parser.add_argument('--testing', action='store_true', default=False, help='debugging tool')
 parser.add_argument('--early_stopping', action='store_true', default=False, help='enable early stopping')
-parser.add_argument('--opt', type=str, choices = ['adam', 'sgd'], default='adam')
+parser.add_argument('--opt', type=str, choices = ['adam', 'sgd', 'lookahead_radam'], default='lookahead_radam')
 parser.add_argument('--drop_out', type=float, default=0.25, help='dropout')
 parser.add_argument('--bag_loss', type=str, choices=['svm', 'ce'], default='ce',
                      help='slide-level classification loss function (default: ce)')
